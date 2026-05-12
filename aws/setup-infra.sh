@@ -2,16 +2,16 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TF_DIR="$SCRIPT_DIR/aws/terraform"
-ANSIBLE_DIR="$SCRIPT_DIR/aws/ansible"
-PEM_FILE="$SCRIPT_DIR/springboot-api.pem"
+TF_DIR="$SCRIPT_DIR/terraform"
+ANSIBLE_DIR="$SCRIPT_DIR/ansible"
+PEM_FILE="$SCRIPT_DIR/../springboot-api.pem"
 
 # ─── Config Jenkins ───────────────────────────────────────────────────────────
-if [ ! -f "$SCRIPT_DIR/aws/.env.infra" ]; then
+if [ ! -f "$SCRIPT_DIR/.env.infra" ]; then
     echo "Erreur : aws/.env.infra introuvable. Copie aws/.env.infra.example et remplis les valeurs."
     exit 1
 fi
-source "$SCRIPT_DIR/aws/.env.infra"
+source "$SCRIPT_DIR/.env.infra"
 
 # ─── 1. Backend setup (S3 + DynamoDB) ───────────────────────────────────────
 echo "==> Backend setup (S3 + DynamoDB)..."
@@ -74,5 +74,5 @@ ansible-playbook -i "$ANSIBLE_DIR/inventory.ini" "$ANSIBLE_DIR/install.yml"
 # ─── 8. Résumé ───────────────────────────────────────────────────────────────
 echo ""
 echo "✓ Infra prête !"
-echo "  SSH    : ssh -i springboot-api.pem ubuntu@$EC2_IP"
+echo "  SSH    : ssh -i ../springboot-api.pem ubuntu@$EC2_IP"
 echo "  App    : http://$EC2_IP:8081/swagger-ui/index.html"

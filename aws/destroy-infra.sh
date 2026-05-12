@@ -2,7 +2,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TF_DIR="$SCRIPT_DIR/aws/terraform"
+TF_DIR="$SCRIPT_DIR/terraform"
 
 # ─── Confirmation ─────────────────────────────────────────────────────────────
 read -p "⚠️  Supprimer toute l'infra AWS ? (yes/no) : " CONFIRM
@@ -23,8 +23,8 @@ terraform destroy -auto-approve
 
 # ─── 3. Nettoyage local ───────────────────────────────────────────────────────
 echo "==> Nettoyage des fichiers locaux..."
-rm -f "$SCRIPT_DIR/springboot-api.pem"
-rm -f "$SCRIPT_DIR/aws/ansible/inventory.ini"
+rm -f "$SCRIPT_DIR/../springboot-api.pem"
+rm -f "$SCRIPT_DIR/ansible/inventory.ini"
 
 echo ""
 echo "✓ Infra détruite et fichiers locaux supprimés."
