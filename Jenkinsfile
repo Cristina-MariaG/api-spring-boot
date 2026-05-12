@@ -16,14 +16,14 @@ pipeline {
                 withCredentials([string(credentialsId: "${GITHUB_TOKEN_CRED_ID}", variable: 'GITHUB_TOKEN')]) {
                     sh 'git config --global credential.helper store'
                     sh 'echo "https://${GITHUB_TOKEN}:@github.com" > ~/.git-credentials'
-                    git url: "https://github.com/dwididit/springboot-simple-restful-api-jenkins.git", branch: 'master'
+                    git url: "https://github.com/Cristina-MariaG/api-spring-boot.git", branch: 'main'
                 }
             }
         }
 
         stage('Build') {
             steps {
-                sh 'mvn clean package'
+                sh 'chmod +x mvnw && sed -i "s/\r//" mvnw && ./mvnw clean package'
             }
         }
 
@@ -41,12 +41,16 @@ docker compose up -d
         stage('Transfer Files') {
             steps {
                 script {
-                    withCredentials([string(credentialsId: "${SERVER_IP_CRED_ID}", variable: 'SERVER_IP')]) {
+                    withCredentials([
+                        string(credentialsId: "${SERVER_IP_CRED_ID}", variable: 'SERVER_IP'),
+                        file(credentialsId: 'env-file-id', variable: 'ENV_FILE')
+                    ]) {
                         sshagent(credentials: ['aws-ec2-pem']) {
                             sh '''
                             scp -o StrictHostKeyChecking=no target/store-0.0.1-SNAPSHOT.jar ubuntu@$SERVER_IP:/home/ubuntu/
                             scp -o StrictHostKeyChecking=no docker-compose.yml ubuntu@$SERVER_IP:/home/ubuntu/
                             scp -o StrictHostKeyChecking=no deploy.sh ubuntu@$SERVER_IP:/home/ubuntu/
+                            scp -o StrictHostKeyChecking=no $ENV_FILE ubuntu@$SERVER_IP:/home/ubuntu/.env
                             '''
                         }
                     }
