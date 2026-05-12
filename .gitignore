@@ -2,3 +2,7 @@ target/
 logs/
 .idea/
 /logs
+.env
+aws/.env.infra
+*.pem
+aws/ansible/inventory.ini
