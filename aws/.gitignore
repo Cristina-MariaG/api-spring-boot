@@ -1,0 +1,16 @@
+# Terraform state
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/.terraform.lock.hcl
+terraform/terraform.tfvars
+
+# Clé SSH générée par Terraform
+*.pem
+
+# Variables sensibles
+.env
+.env.infra
+
+# Ansible
+ansible/inventory.ini
