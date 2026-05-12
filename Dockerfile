@@ -1,5 +1,5 @@
 # Use the Java runtime image for OpenJDK 21
-FROM openjdk:21
+FROM eclipse-temurin:21-jre-jammy
 
 # Set the maintainer information
 LABEL maintainer="didit@dwidi.dev"
