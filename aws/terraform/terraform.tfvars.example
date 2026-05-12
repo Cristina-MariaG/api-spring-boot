@@ -1,0 +1,7 @@
+aws_region    = "eu-west-3"
+instance_type = "t2.micro"
+environment   = "staging"
+project_name  = "springboot-api"
+ssh_port      = 22
+my_ip         = "x.x.x.x/32"
+app_port      = 8081
