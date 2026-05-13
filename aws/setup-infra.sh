@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TF_DIR="$SCRIPT_DIR/terraform"
 ANSIBLE_DIR="$SCRIPT_DIR/ansible"
-PEM_FILE="$SCRIPT_DIR/../springboot-api.pem"
+PEM_FILE="$HOME/springboot-api.pem"
 
 # ─── Config Jenkins ───────────────────────────────────────────────────────────
 if [ ! -f "$SCRIPT_DIR/.env.infra" ]; then
@@ -27,29 +27,49 @@ terraform init
 echo "==> Terraform apply..."
 terraform apply -auto-approve
 
-# ─── 3. Récupération de l'IP ─────────────────────────────────────────────────
+# ─── 3. Copie et sécurisation de la clé PEM ─────────────────────────────────
+cp "$SCRIPT_DIR/../springboot-api.pem" "$PEM_FILE"
+chmod 600 "$PEM_FILE"
+
+# ─── 4. Récupération de l'IP ─────────────────────────────────────────────────
 echo "==> Récupération de l'Elastic IP..."
 EC2_IP=$(terraform output -raw elastic_ip)
 echo "    IP: $EC2_IP"
 
-# ─── 4. Mise à jour du credential Jenkins ────────────────────────────────────
-echo "==> Mise à jour du credential Jenkins (server-ip-id)..."
+# ─── 4. Création ou mise à jour du credential Jenkins (server-ip-id) ─────────
+echo "==> Synchronisation du credential Jenkins (server-ip-id)..."
 CRUMB=$(curl -s "$JENKINS_URL/crumbIssuer/api/xml?xpath=concat(//crumbRequestField,\":\",//crumb)" \
     --user "$JENKINS_USER:$JENKINS_TOKEN")
 
-curl -s -X POST "$JENKINS_URL/credentials/store/system/domain/_/credential/server-ip-id/updateSubmit" \
+CREDENTIAL_XML="<org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl>
+  <scope>GLOBAL</scope>
+  <id>server-ip-id</id>
+  <description>EC2 Server IP</description>
+  <secret>$EC2_IP</secret>
+</org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl>"
+
+# Vérifie si le credential existe déjà
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
     --user "$JENKINS_USER:$JENKINS_TOKEN" \
-    -H "$CRUMB" \
-    --data-urlencode "json={
-        \"\": \"0\",
-        \"credentials\": {
-            \"scope\": \"GLOBAL\",
-            \"id\": \"server-ip-id\",
-            \"secret\": \"$EC2_IP\",
-            \"\$class\": \"org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl\"
-        }
-    }" > /dev/null
-echo "    credential mis à jour !"
+    "$JENKINS_URL/credentials/store/system/domain/_/credential/server-ip-id/")
+
+if [ "$STATUS" = "200" ]; then
+    # Mise à jour
+    curl -s -X POST "$JENKINS_URL/credentials/store/system/domain/_/credential/server-ip-id/config.xml" \
+        --user "$JENKINS_USER:$JENKINS_TOKEN" \
+        -H "$CRUMB" \
+        -H "Content-Type: application/xml" \
+        -d "$CREDENTIAL_XML"
+    echo "    credential mis à jour !"
+else
+    # Création
+    curl -s -X POST "$JENKINS_URL/credentials/store/system/domain/_/createCredentials" \
+        --user "$JENKINS_USER:$JENKINS_TOKEN" \
+        -H "$CRUMB" \
+        -H "Content-Type: application/xml" \
+        -d "$CREDENTIAL_XML"
+    echo "    credential créé !"
+fi
 
 # ─── 5. Génération de l'inventory Ansible ────────────────────────────────────
 echo "==> Génération de ansible/inventory.ini..."
@@ -65,6 +85,9 @@ until ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -i "$PEM_FILE" ubuntu@
     sleep 10
 done
 echo "    serveur prêt !"
+
+echo "==> Enregistrement de la clé SSH du serveur dans known_hosts..."
+ssh-keyscan -H "$EC2_IP" >> ~/.ssh/known_hosts
 
 # ─── 7. Ansible ──────────────────────────────────────────────────────────────
 echo "==> Lancement du playbook Ansible..."
