@@ -3,7 +3,6 @@ pipeline {
 
     environment {
         SERVER_IP_CRED_ID = 'server-ip-id'
-        GITHUB_TOKEN_CRED_ID = 'github-token-id'
     }
 
     triggers {
@@ -13,11 +12,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                withCredentials([string(credentialsId: "${GITHUB_TOKEN_CRED_ID}", variable: 'GITHUB_TOKEN')]) {
-                    sh 'git config --global credential.helper store'
-                    sh 'echo "https://${GITHUB_TOKEN}:@github.com" > ~/.git-credentials'
-                    git url: "https://github.com/Cristina-MariaG/api-spring-boot.git", branch: 'main'
-                }
+                checkout scm
             }
         }
 
