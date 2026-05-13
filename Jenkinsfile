@@ -44,7 +44,8 @@ docker compose up -d
                             sh '''
                             mkdir -p ~/.ssh && chmod 700 ~/.ssh
                             ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
-                            scp target/store-0.0.1-SNAPSHOT.jar ubuntu@$SERVER_IP:/home/ubuntu/
+                            ssh ubuntu@$SERVER_IP "mkdir -p /home/ubuntu/target"
+                            scp target/store-0.0.1-SNAPSHOT.jar ubuntu@$SERVER_IP:/home/ubuntu/target/
                             scp docker-compose.yml ubuntu@$SERVER_IP:/home/ubuntu/
                             scp Dockerfile ubuntu@$SERVER_IP:/home/ubuntu/
                             scp deploy.sh ubuntu@$SERVER_IP:/home/ubuntu/
