@@ -23,7 +23,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh 'chmod +x mvnw && sed -i "s/\r//" mvnw && ./mvnw clean package'
+                sh 'chmod +x mvnw && sed -i "s/\r//" mvnw && ./mvnw clean package -DskipTests'
             }
         }
 
@@ -47,10 +47,11 @@ docker compose up -d
                     ]) {
                         sshagent(credentials: ['aws-ec2-pem']) {
                             sh '''
-                            scp -o StrictHostKeyChecking=no target/store-0.0.1-SNAPSHOT.jar ubuntu@$SERVER_IP:/home/ubuntu/
-                            scp -o StrictHostKeyChecking=no docker-compose.yml ubuntu@$SERVER_IP:/home/ubuntu/
-                            scp -o StrictHostKeyChecking=no deploy.sh ubuntu@$SERVER_IP:/home/ubuntu/
-                            scp -o StrictHostKeyChecking=no $ENV_FILE ubuntu@$SERVER_IP:/home/ubuntu/.env
+                            ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
+                            scp target/store-0.0.1-SNAPSHOT.jar ubuntu@$SERVER_IP:/home/ubuntu/
+                            scp docker-compose.yml ubuntu@$SERVER_IP:/home/ubuntu/
+                            scp deploy.sh ubuntu@$SERVER_IP:/home/ubuntu/
+                            scp $ENV_FILE ubuntu@$SERVER_IP:/home/ubuntu/.env
                             '''
                         }
                     }
@@ -64,7 +65,7 @@ docker compose up -d
                     withCredentials([string(credentialsId: "${SERVER_IP_CRED_ID}", variable: 'SERVER_IP')]) {
                         sshagent(credentials: ['aws-ec2-pem']) {
                             sh '''
-                            ssh -o StrictHostKeyChecking=no ubuntu@$SERVER_IP "/home/ubuntu/deploy.sh"
+                            ssh ubuntu@$SERVER_IP "/home/ubuntu/deploy.sh"
                             '''
                             sh '''
                             sleep 30
