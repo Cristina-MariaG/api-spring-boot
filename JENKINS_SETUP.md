@@ -10,22 +10,19 @@
 
 ## Étape 1 — Démarrer Jenkins en local via Docker
 
-Lance Jenkins dans un container Docker :
+Le dossier `jenkins_local/` contient trois scripts prêts à l'emploi :
 
 ```bash
-docker run -d \
-  --name jenkins \
-  -p 8080:8080 \
-  -p 50000:50000 \
-  -v jenkins_home:/var/jenkins_home \
-  jenkins/jenkins:lts
+./jenkins_local/jenkins_start.sh   # démarre Jenkins (crée le volume si besoin, relance si déjà existant)
+./jenkins_local/jenkins_stop.sh    # arrête Jenkins (données conservées dans le volume)
+./jenkins_local/jenkins_logs.sh    # affiche les logs en temps réel
 ```
 
-| Option | Rôle |
-|---|---|
-| `-p 8080:8080` | Interface web Jenkins |
-| `-p 50000:50000` | Communication avec les agents Jenkins |
-| `-v jenkins_home:/var/jenkins_home` | Persistance des données Jenkins |
+Le script `jenkins_start.sh` gère automatiquement :
+- Le démarrage de Docker Desktop si Docker ne répond pas (WSL/Windows)
+- La création du volume `jenkins-data` si c'est le premier lancement
+- Le redémarrage du container si il existe déjà mais est arrêté
+- L'affichage du mot de passe initial à la fin
 
 Accède à Jenkins :
 ```
@@ -36,7 +33,7 @@ http://localhost:8080
 
 ## Étape 2 — Déverrouiller Jenkins
 
-Récupère le mot de passe initial généré au démarrage :
+Le mot de passe initial est affiché automatiquement à la fin de `jenkins_start.sh`. Si tu en as besoin à nouveau :
 
 ```bash
 docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
@@ -137,10 +134,28 @@ Manage Jenkins → Credentials → System → Global credentials → Add Credent
 | Kind | `SSH Username with private key` |
 | ID | `aws-ec2-pem` |
 | Username | `ubuntu` |
-| Private Key | contenu de ton fichier `.pem` |
+| Private Key | `Enter directly` → colle le contenu du fichier `.pem` |
 | Description | `AWS EC2 PEM Key` |
 
-> Le fichier `.pem` est téléchargé depuis AWS lors de la création de l'instance EC2.
+> La clé PEM est générée automatiquement par Terraform et copiée dans `~/springboot-api.pem` par `setup-infra.sh`. Utilise `cat ~/springboot-api.pem` pour récupérer son contenu.
+
+> **Important** : la clé doit être au format **RSA PEM** et commencer par `-----BEGIN RSA PRIVATE KEY-----`. Si elle commence par `-----BEGIN OPENSSH PRIVATE KEY-----`, convertis-la avec :
+> ```bash
+> ssh-keygen -p -m PEM -f ~/springboot-api.pem
+> ```
+
+---
+
+### Credential 4 — Fichier .env
+
+| Champ | Valeur |
+|---|---|
+| Kind | `Secret file` |
+| File | le fichier `.env` de l'application |
+| ID | `env-file-id` |
+| Description | `App .env file` |
+
+> Ce fichier est transféré via SCP sur le serveur EC2 à chaque déploiement. Il contient les variables `DB_*`, `API_KEY`, etc.
 
 ---
 
@@ -237,26 +252,27 @@ Jenkins vérifie automatiquement cette URL à la fin du pipeline et échoue si e
 |---|---|---|
 | `github-token-id` | Secret text | Token GitHub |
 | `server-ip-id` | Secret text | IP publique EC2 |
-| `aws-ec2-pem` | SSH private key | Contenu du fichier `.pem` |
+| `aws-ec2-pem` | SSH Username with private key | Contenu du fichier `.pem` (format RSA) |
+| `env-file-id` | Secret file | Fichier `.env` de l'application |
 
 ---
 
-## Commandes Docker utiles
+## Commandes utiles
 
 ```bash
 # Démarrer Jenkins
-docker start jenkins
+./jenkins_local/jenkins_start.sh
 
 # Arrêter Jenkins
-docker stop jenkins
+./jenkins_local/jenkins_stop.sh
 
 # Voir les logs Jenkins
-docker logs -f jenkins
+./jenkins_local/jenkins_logs.sh
 
 # Accéder au container Jenkins
 docker exec -it jenkins bash
 
-# Mot de passe initial
+# Mot de passe initial (si nécessaire)
 docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
