@@ -49,6 +49,7 @@ docker compose up -d
                             scp docker-compose.yml ubuntu@$SERVER_IP:/home/ubuntu/
                             scp Dockerfile ubuntu@$SERVER_IP:/home/ubuntu/
                             scp deploy.sh ubuntu@$SERVER_IP:/home/ubuntu/
+                            ssh ubuntu@$SERVER_IP "rm -f /home/ubuntu/.env"
                             scp $ENV_FILE ubuntu@$SERVER_IP:/home/ubuntu/.env
                             '''
                         }
