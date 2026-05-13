@@ -1,8 +1,7 @@
-// UserService.java
-
 package org.store.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.store.model.User;
 import org.store.repository.UserRepository;
@@ -14,14 +13,16 @@ import java.util.Optional;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final BCryptPasswordEncoder passwordEncoder;
 
     @Autowired
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, BCryptPasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
-
     public User createUser(User user) {
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
         return userRepository.save(user);
     }
 
@@ -37,17 +38,13 @@ public class UserService {
         User existingUser = userRepository.findById(userUpdateRequest.getId())
                 .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userUpdateRequest.getId()));
 
-        // Update fields except the password
         existingUser.setEmail(userUpdateRequest.getEmail());
         existingUser.setUsername(userUpdateRequest.getUsername());
 
-        // Store the password in plain text only for testing (Not recommended for production!)
         String newPassword = userUpdateRequest.getPassword();
         if (newPassword != null && !newPassword.isEmpty()) {
-            existingUser.setPassword(newPassword);
+            existingUser.setPassword(passwordEncoder.encode(newPassword));
         }
-
-        // Do not update createdAt or other fields that should not change
 
         return userRepository.save(existingUser);
     }
