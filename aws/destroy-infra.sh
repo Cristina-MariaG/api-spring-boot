@@ -12,18 +12,40 @@ if [ "$CONFIRM" != "yes" ]; then
 fi
 
 # ─── 1. Terraform destroy (EC2, SG, EIP, key pair) ───────────────────────────
-echo "==> Terraform destroy..."
+echo "==> Terraform plan destroy..."
 cd "$TF_DIR"
-terraform destroy -auto-approve
+terraform plan -destroy -out=destroy.plan
+echo ""
+terraform show destroy.plan
+echo ""
+read -p "Confirmer la destruction des ressources ci-dessus ? (yes/no) : " CONFIRM2
+if [ "$CONFIRM2" != "yes" ]; then
+    echo "Annulé."
+    rm -f destroy.plan
+    exit 0
+fi
+terraform apply destroy.plan
+rm -f destroy.plan
 
 # ─── 2. Backend destroy (S3 + DynamoDB) ──────────────────────────────────────
 echo "==> Destruction du backend (S3 + DynamoDB)..."
 cd "$TF_DIR/backend-setup"
-terraform destroy -auto-approve
+terraform plan -destroy -out=destroy-backend.plan
+terraform show destroy-backend.plan
+echo ""
+read -p "Confirmer la destruction du backend S3/DynamoDB ? (yes/no) : " CONFIRM3
+if [ "$CONFIRM3" != "yes" ]; then
+    echo "Backend conservé."
+    rm -f destroy-backend.plan
+    exit 0
+fi
+terraform apply destroy-backend.plan
+rm -f destroy-backend.plan
 
 # ─── 3. Nettoyage local ───────────────────────────────────────────────────────
 echo "==> Nettoyage des fichiers locaux..."
 rm -f "$SCRIPT_DIR/../springboot-api.pem"
+rm -f "$HOME/springboot-api.pem"
 rm -f "$SCRIPT_DIR/ansible/inventory.ini"
 
 echo ""
