@@ -68,13 +68,13 @@ docker compose up -d
                             '''
                             sh '''
                             sleep 30
-                            url="http://$SERVER_IP:8081/swagger-ui/index.html"
+                            url="http://$SERVER_IP:8081/actuator/health"
                             response=$(curl -s -o /dev/null -w "%{http_code}" $url)
                             echo "Response code: $response"
                             if [ "$response" -eq 200 ]; then
-                                echo "Visit to $url was successful"
+                                echo "App is up at http://$SERVER_IP:8081"
                             else
-                                echo "Visit to $url failed with status code: $response"
+                                echo "Health check failed with status code: $response"
                                 exit 1
                             fi
                             '''
