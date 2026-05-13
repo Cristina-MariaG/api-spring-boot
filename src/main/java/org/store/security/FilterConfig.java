@@ -15,12 +15,7 @@ public class FilterConfig {
     public FilterRegistrationBean<ApiKeyRequestFilter> apiKeyFilter(){
         FilterRegistrationBean<ApiKeyRequestFilter> registrationBean = new FilterRegistrationBean<>();
         registrationBean.setFilter(new ApiKeyRequestFilter(apiKey));
-        registrationBean.addUrlPatterns(
-            "/api/*",
-            "/swagger-ui/*",
-            "/swagger-ui.html",
-            "/v3/api-docs/*"
-        );
+        registrationBean.addUrlPatterns("/api/*");
         return registrationBean;
     }
 }
