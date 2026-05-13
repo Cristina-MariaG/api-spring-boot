@@ -46,6 +46,7 @@ docker compose up -d
                             ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
                             scp target/store-0.0.1-SNAPSHOT.jar ubuntu@$SERVER_IP:/home/ubuntu/
                             scp docker-compose.yml ubuntu@$SERVER_IP:/home/ubuntu/
+                            scp Dockerfile ubuntu@$SERVER_IP:/home/ubuntu/
                             scp deploy.sh ubuntu@$SERVER_IP:/home/ubuntu/
                             scp $ENV_FILE ubuntu@$SERVER_IP:/home/ubuntu/.env
                             '''
