@@ -1,224 +1,88 @@
-# Project Overview
+# Spring Boot API — CI/CD & Infrastructure DevOps
 
-This project is a simple RESTful API created using Spring Boot.
+Ce projet est conçu pour mettre en place une chaîne DevOps complète autour d'une API REST Spring Boot. L'objectif n'est pas seulement de faire tourner l'application, mais de couvrir chaque brique de l'infrastructure :
 
-
-## CI/CD with Jenkins
-This project includes a Jenkins pipeline for CI/CD. The pipeline performs the following tasks:
-1. Checks out the code from the Git repository.
-2. Builds the project using Maven.
-3. Runs unit tests.
-4. Deploys the application to the specified environment.
-
-
-### Setting Up Jenkins
-1. Install Jenkins from the official website.
-2. Install the necessary plugins:
-   - Git Plugin
-   - Maven Integration Plugin
-3. Configure Jenkins with your Git repository and Maven settings.
-
-### Creating a Pipeline
-1. Create a new pipeline in Jenkins.
-2. Configure the pipeline script to point to your Jenkinsfile.
-
-
-GitHub/GitLab
-     ↓
-Jenkins (local Docker)
-     ↓
- ┌───┴────────────────┐
- │  1. Build Java     │  (Maven/Gradle)
- │  2. Tests          │
- │  3. Terraform      │  (provisionner l'infra cloud)
- │  4. Ansible        │  (configurer + déployer l'API)
- └────────────────────┘
-
-## Jenkinsfile — Pipeline détaillé
-
-Voici le `Jenkinsfile` complet utilisé dans ce projet, avec l'explication de chaque bloc.
-
-```groovy
-pipeline {
-    agent any
-
-    environment {
-        SERVER_IP_CRED_ID = 'server-ip-id'
-        GITHUB_TOKEN_CRED_ID = 'github-token-id'
-    }
-
-    triggers {
-        githubPush()
-    }
-
-    stages {
-        stage('Checkout') {
-            steps {
-                withCredentials([string(credentialsId: "${GITHUB_TOKEN_CRED_ID}", variable: 'GITHUB_TOKEN')]) {
-                    sh 'git config --global credential.helper store'
-                    sh 'echo "https://${GITHUB_TOKEN}:@github.com" > ~/.git-credentials'
-                    git url: "https://github.com/dwididit/springboot-simple-restful-api-jenkins.git", branch: 'master'
-                }
-            }
-        }
-
-        stage('Build') {
-            steps {
-                sh 'mvn clean package'
-            }
-        }
-
-        stage('Prepare Deployment') {
-            steps {
-                writeFile file: 'deploy.sh', text: '''#!/bin/bash
-cd /home/ubuntu/
-docker compose down
-docker compose up -d
-'''
-                sh 'chmod +x deploy.sh'
-            }
-        }
-
-        stage('Transfer Files') {
-            steps {
-                script {
-                    withCredentials([string(credentialsId: "${SERVER_IP_CRED_ID}", variable: 'SERVER_IP')]) {
-                        sshagent(credentials: ['aws-ec2-pem']) {
-                            sh '''
-                            scp -o StrictHostKeyChecking=no target/store-0.0.1-SNAPSHOT.jar ubuntu@$SERVER_IP:/home/ubuntu/
-                            scp -o StrictHostKeyChecking=no docker-compose.yml ubuntu@$SERVER_IP:/home/ubuntu/
-                            scp -o StrictHostKeyChecking=no deploy.sh ubuntu@$SERVER_IP:/home/ubuntu/
-                            '''
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Deploy to Staging') {
-            steps {
-                script {
-                    withCredentials([string(credentialsId: "${SERVER_IP_CRED_ID}", variable: 'SERVER_IP')]) {
-                        sshagent(credentials: ['aws-ec2-pem']) {
-                            sh '''
-                            ssh -o StrictHostKeyChecking=no ubuntu@$SERVER_IP "/home/ubuntu/deploy.sh"
-                            '''
-                            sh '''
-                            sleep 30
-                            url="http://$SERVER_IP:8081/swagger-ui/index.html"
-                            response=$(curl -s -o /dev/null -w "%{http_code}" $url)
-                            echo "Response code: $response"
-                            if [ "$response" -eq 200 ]; then
-                                echo "Visit to $url was successful"
-                            else
-                                echo "Visit to $url failed with status code: $response"
-                                exit 1
-                            fi
-                            '''
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            cleanWs()
-        }
-    }
-}
-```
+- **Jenkins** — pipeline CI/CD déclenché automatiquement à chaque push GitHub
+- **Terraform** — provisionnement automatique d'une instance EC2 sur AWS (Elastic IP, Security Group, clé PEM, bucket S3 + table DynamoDB pour le state)
+- **Ansible** — configuration du serveur distant (installation de Docker CE, démarrage automatique, ajout de l'utilisateur au groupe docker)
+- **Docker / Docker Compose** — conteneurisation de l'application et de la base PostgreSQL
+- **Spring Boot 3.2 / Java 21** — API REST avec gestion des utilisateurs et contacts, sécurisée par clé API
 
 ---
 
-### `agent any`
-Jenkins peut utiliser n'importe quel agent/nœud disponible pour exécuter ce pipeline.
-
----
-
-### `environment`
-Déclare deux variables qui référencent des **identifiants Jenkins** (credentials) — les vraies valeurs sont stockées de façon sécurisée dans Jenkins et jamais écrites en dur.
-
-| Variable | Credential Jenkins | Rôle |
-|---|---|---|
-| `SERVER_IP_CRED_ID` | `server-ip-id` | IP du serveur EC2 cible |
-| `GITHUB_TOKEN_CRED_ID` | `github-token-id` | Token d'accès GitHub |
-
----
-
-### `triggers { githubPush() }`
-Le pipeline se déclenche **automatiquement à chaque push** sur GitHub via un webhook. Aucune intervention manuelle n'est nécessaire.
-
----
-
-### Stage `Checkout`
-Clone le dépôt GitHub en utilisant le token d'authentification stocké dans Jenkins. Le token est injecté via `withCredentials` pour ne jamais apparaître dans les logs.
-
----
-
-### Stage `Build`
-Compile le projet et génère le fichier `.jar` avec Maven :
-```bash
-mvn clean package
-```
-- `clean` : supprime les anciens artefacts
-- `package` : compile le code et produit `target/store-0.0.1-SNAPSHOT.jar`
-
----
-
-### Stage `Prepare Deployment`
-Génère dynamiquement un script `deploy.sh` sur l'agent Jenkins. Ce script sera ensuite transféré et exécuté sur le serveur distant. Il effectue :
-1. `docker compose down` — arrête les containers existants
-2. `docker compose up -d` — redémarre avec la nouvelle version
-
----
-
-### Stage `Transfer Files`
-Transfère via **SCP** (SSH Copy) trois fichiers vers le serveur EC2 :
-
-| Fichier | Destination |
-|---|---|
-| `store-0.0.1-SNAPSHOT.jar` | Le binaire de l'application |
-| `docker-compose.yml` | La configuration Docker |
-| `deploy.sh` | Le script de redémarrage |
-
-La clé PEM AWS (`aws-ec2-pem`) est gérée par `sshagent` — elle n'est jamais exposée en clair.
-
----
-
-### Stage `Deploy to Staging`
-1. Exécute `deploy.sh` à distance via SSH sur le serveur EC2
-2. Attend 30 secondes que l'application démarre
-3. Vérifie que Swagger UI répond bien avec un **HTTP 200** :
-```
-http://<SERVER_IP>:8081/swagger-ui/index.html
-```
-Si le code de retour n'est pas 200, le pipeline échoue (`exit 1`).
-
----
-
-### `post { always { cleanWs() } }`
-Après chaque exécution (succès ou échec), Jenkins **nettoie l'espace de travail** pour éviter que des fichiers résiduels (JAR, credentials temporaires) ne s'accumulent sur l'agent.
-
----
-
-### Flux complet
+## Architecture
 
 ```
 Push GitHub
     ↓
-Checkout (clone repo)
+Jenkins (local via Docker)
     ↓
-Build (mvn clean package → .jar)
+ ┌──────────────────────────┐
+ │  1. Checkout             │
+ │  2. Build (Maven → .jar) │
+ │  3. Transfer (SCP)       │
+ │  4. Deploy (SSH)         │
+ │  5. Health check         │
+ └──────────────────────────┘
     ↓
-Prepare Deployment (génère deploy.sh)
+EC2 AWS (Ubuntu 22.04)
     ↓
-Transfer Files (SCP → EC2)
-    ↓
-Deploy to Staging (SSH → docker compose restart)
-    ↓
-Health Check (curl Swagger → HTTP 200 ✓)
-    ↓
-Clean Workspace
+Docker Compose (app + PostgreSQL)
 ```
+
+---
+
+## Lancer Jenkins en local
+
+Un dossier `jenkins_local/` contient des scripts prêts à l'emploi pour démarrer Jenkins dans Docker sans aucune installation manuelle :
+
+```bash
+./jenkins_local/jenkins_start.sh   # démarre Jenkins
+./jenkins_local/jenkins_stop.sh    # arrête Jenkins
+./jenkins_local/jenkins_logs.sh    # affiche les logs
+```
+
+Jenkins sera accessible sur `http://localhost:8080`.
+
+---
+
+## Provisionner l'infrastructure AWS
+
+Tout est dans le dossier `aws/`. Un README dédié (`aws/README.md`) documente chaque étape en détail : ce que Terraform crée, ce qu'Ansible configure, et comment les scripts fonctionnent.
+
+```bash
+./aws/setup-infra.sh     # crée toute l'infra from scratch
+./aws/destroy-infra.sh   # détruit toute l'infra (avec confirmation)
+```
+
+`setup-infra.sh` enchaîne automatiquement : Terraform → copie de la clé PEM → synchronisation de l'IP dans Jenkins → génération de l'inventaire Ansible → attente SSH → playbook Ansible.
+
+---
+
+## Credentials Jenkins requis
+
+| ID Jenkins | Type | Contenu |
+|---|---|---|
+| `github-token-id` | Secret text | Token GitHub |
+| `server-ip-id` | Secret text | IP EC2 (mis à jour automatiquement par `setup-infra.sh`) |
+| `aws-ec2-pem` | SSH private key | Clé PEM générée par Terraform |
+| `env-file-id` | Secret file | Fichier `.env` de l'application |
+
+---
+
+## Variables d'environnement
+
+Copier `.env.example` en `.env` et remplir les valeurs :
+
+```bash
+cp .env.example .env
+```
+
+Variables requises : `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SPRING_DATASOURCE_URL`, `API_KEY`.
+
+---
+
+## Documentation
+
+- `aws/README.md` — infrastructure Terraform + Ansible, scripts setup/destroy, détail de chaque ressource créée
+- `JENKINS_SETUP.md` — configuration initiale de Jenkins (plugins, credentials, webhook GitHub)
