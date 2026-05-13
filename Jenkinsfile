@@ -47,6 +47,7 @@ docker compose up -d
                     ]) {
                         sshagent(credentials: ['aws-ec2-pem']) {
                             sh '''
+                            mkdir -p ~/.ssh && chmod 700 ~/.ssh
                             ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
                             scp target/store-0.0.1-SNAPSHOT.jar ubuntu@$SERVER_IP:/home/ubuntu/
                             scp docker-compose.yml ubuntu@$SERVER_IP:/home/ubuntu/
