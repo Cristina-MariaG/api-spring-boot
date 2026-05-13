@@ -27,7 +27,7 @@ pipeline {
                 writeFile file: 'deploy.sh', text: '''#!/bin/bash
 cd /home/ubuntu/
 docker compose down
-docker compose up -d
+docker compose up -d --build
 '''
                 sh 'chmod +x deploy.sh'
             }
