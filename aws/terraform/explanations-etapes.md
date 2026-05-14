@@ -17,7 +17,7 @@ Avantages :
 
 ```
 aws/terraform/
-├── backend-setup/            ← Étape 1 : crée le bucket S3 + DynamoDB
+├── backend-setup/            ← Étape 1 : crée le bucket S3
 │   ├── main.tf
 │   └── variables.tf
 ├── main.tf                   ← Étape 2 : infra principale
@@ -82,20 +82,20 @@ Par défaut le tfstate est local sur ta machine. C'est dangereux :
 | La clé SSH est dans le fichier en clair | Risque de sécurité sur le disque local |
 | Deux `apply` en même temps | Corruption du state |
 
-### La solution : Backend S3 + DynamoDB
+### La solution : Backend S3 avec verrou natif
 
 ```
 terraform apply
     ↓
-1. Lit le state depuis S3
-2. Pose un verrou dans DynamoDB
+1. Pose un verrou dans S3 (.tflock)
+2. Lit le state depuis S3
 3. Crée/modifie les ressources AWS
 4. Écrit le nouveau state dans S3
-5. Libère le verrou DynamoDB
+5. Libère le verrou (.tflock supprimé)
 ```
 
 **Le state n'est jamais stocké sur ta machine** — il vit dans S3, chiffré AES-256.
-DynamoDB empêche deux personnes de faire `apply` en même temps.
+Le verrou natif S3 (`use_lockfile`) empêche deux `apply` simultanés — plus besoin de DynamoDB depuis Terraform 1.10.
 Le versioning S3 permet de récupérer un ancien state en cas de corruption.
 
 **La mise à jour est automatique** — à chaque `terraform apply` réussi, S3 est mis à jour
@@ -132,9 +132,9 @@ Contient toutes les ressources AWS créées. Voici ce que crée chaque bloc :
 #### Backend S3
 ```hcl
 backend "s3" {
-  bucket         = "springboot-api-tfstate"
-  encrypt        = true
-  dynamodb_table = "springboot-api-tf-lock"
+  bucket       = "springboot-api-tfstate"
+  encrypt      = true
+  use_lockfile = true
 }
 ```
 Connecte Terraform au bucket S3 pour stocker le state à distance.
@@ -223,12 +223,11 @@ Dossier séparé car il y a un problème de démarrage (chicken-and-egg) :
 - Le bucket S3 doit exister avant de configurer le backend S3
 - Mais on ne peut pas créer le bucket avec Terraform si le backend n'existe pas encore
 
-Solution : créer le bucket et DynamoDB avec un Terraform séparé, sans backend,
-puis utiliser ces ressources comme backend pour l'infra principale.
+Solution : créer le bucket S3 avec un Terraform séparé, sans backend,
+puis utiliser ce bucket comme backend pour l'infra principale.
 
 **`backend-setup/main.tf` crée :**
 - Bucket S3 avec accès public bloqué, chiffrement AES-256, versioning activé
-- Table DynamoDB pour le verrou
 
 ---
 
@@ -263,7 +262,7 @@ aws configure
 # Default region : eu-west-3
 ```
 
-### Étape 2 — Créer le bucket S3 et DynamoDB
+### Étape 2 — Créer le bucket S3
 
 ```bash
 cd aws/terraform/backend-setup

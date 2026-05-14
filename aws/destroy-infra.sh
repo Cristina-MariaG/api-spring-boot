@@ -51,7 +51,7 @@ cd "$TF_DIR/backend-setup"
 terraform plan -destroy -out=destroy-backend.plan
 terraform show destroy-backend.plan
 echo ""
-read -p "Confirmer la destruction du backend S3/DynamoDB ? (yes/no) : " CONFIRM4
+read -p "Confirmer la destruction du backend S3 ? (yes/no) : " CONFIRM4
 if [ "$CONFIRM4" != "yes" ]; then
     echo "Backend conservé."
     rm -f destroy-backend.plan

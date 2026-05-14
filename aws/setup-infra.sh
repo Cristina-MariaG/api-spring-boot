@@ -13,8 +13,8 @@ if [ ! -f "$SCRIPT_DIR/.env.infra" ]; then
 fi
 source "$SCRIPT_DIR/.env.infra"
 
-# ─── 1. Backend setup (S3 + DynamoDB) ───────────────────────────────────────
-echo "==> Backend setup (S3 + DynamoDB)..."
+# ─── 1. Backend setup (S3) ───────────────────────────────────────────────────
+echo "==> Backend setup (S3)..."
 cd "$TF_DIR/backend-setup"
 terraform init
 terraform apply -auto-approve

@@ -6,7 +6,7 @@ This folder contains everything needed to provision and configure the AWS infras
 
 - [Terraform](https://developer.hashicorp.com/terraform/install) installed locally
 - [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) installed locally
-- AWS CLI configured (`aws configure`) with an account that has EC2, S3, DynamoDB, and IAM permissions
+- AWS CLI configured (`aws configure`) with an account that has EC2, S3, and IAM permissions
 - `aws/.env.infra` filled in (copy from `aws/.env.infra.example`)
 - `aws/terraform/terraform.tfvars` filled in (copy from `aws/terraform/terraform.tfvars.example`)
 
@@ -26,7 +26,7 @@ Runs the full chain in order:
 
 | Step | Action |
 |------|--------|
-| 1 | `terraform apply` on `backend-setup` → creates the S3 bucket and DynamoDB table |
+| 1 | `terraform apply` on `backend-setup` → creates the S3 bucket |
 | 2 | `terraform apply` on `main` → creates the EC2 instance, Elastic IP, Security Group, and PEM key |
 | 3 | Copies the PEM key to `~/.ssh/springboot-api.pem` and applies `chmod 600` |
 | 4 | Retrieves the Elastic IP via `terraform output` |
@@ -35,7 +35,7 @@ Runs the full chain in order:
 | 7 | Waits for SSH to be available on the instance (polls every 10s) |
 | 8 | Runs `ansible-playbook install.yml` to configure Docker on the server |
 
-> The backend-setup is idempotent: if the S3 bucket and DynamoDB table already exist, Terraform does nothing.
+> The backend-setup is idempotent: if the S3 bucket already exists, Terraform does nothing.
 
 ---
 
@@ -52,7 +52,7 @@ Prompts for confirmation (`yes`) before proceeding.
 | Step | Action |
 |------|--------|
 | 1 | `terraform destroy` on `main` → removes EC2, EIP, Security Group, key pair |
-| 2 | `terraform destroy` on `backend-setup` → removes the S3 bucket and DynamoDB table |
+| 2 | `terraform destroy` on `backend-setup` → removes the S3 bucket |
 | 3 | Deletes `springboot-api.pem` locally |
 | 4 | Deletes `aws/ansible/inventory.ini` |
 
