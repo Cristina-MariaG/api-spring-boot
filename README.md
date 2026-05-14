@@ -106,6 +106,45 @@ The `Jenkinsfile` defines a 5-stage pipeline triggered automatically on every Gi
 
 See [`JENKINS_SETUP.md`](JENKINS_SETUP.md) for initial Jenkins configuration (plugins, credentials, GitHub webhook).
 
+### Why Jenkins and not GitHub Actions or GitLab CI?
+
+All three tools solve the same problem — automating build, test, and deployment on code changes. The choice depends on the context.
+
+**Jenkins**
+
+| Advantages | Disadvantages |
+|-----------|--------------|
+| Self-hosted: full control over the execution environment | Requires a server to run on (or a local machine) |
+| No build minute limits | Initial setup takes time (plugins, credentials, configuration) |
+| Works on any infrastructure, including air-gapped or on-premise networks | Maintenance overhead: updates, security patches |
+| Agnostic: works with GitHub, GitLab, Bitbucket, or any Git server | Groovy DSL has a learning curve |
+| 1800+ plugins, deep integration with enterprise tools (JIRA, SonarQube, Artifactory, LDAP) | UI feels dated compared to modern alternatives |
+| Programmatic pipelines with Groovy — better suited for complex conditional logic | |
+| Widely adopted in large enterprises — strong career value | |
+
+**GitHub Actions**
+
+| Advantages | Disadvantages |
+|-----------|--------------|
+| Zero infrastructure to set up or maintain | Free tier limited to 2000 min/month on private repos, paid beyond that |
+| Native integration directly in the GitHub repository | Tightly coupled to GitHub — harder to migrate |
+| Large marketplace of ready-made actions | Less control over the execution environment |
+| Simple YAML syntax | Complex pipelines become verbose in YAML |
+| Free for public repositories | Runner customization requires self-hosted runners |
+
+**GitLab CI**
+
+| Advantages | Disadvantages |
+|-----------|--------------|
+| Fully integrated with GitLab (code, issues, registry, pipeline in one place) | Only relevant if the codebase is hosted on GitLab |
+| Clean and readable YAML syntax | Same YAML complexity limits as GitHub Actions at scale |
+| Built-in container registry | Requires GitLab as the hosting platform |
+| Free shared runners included | |
+
+**Why Jenkins for this project**
+
+The goal was to learn how to set up a CI/CD pipeline from scratch — Jenkins is the right tool for that because it requires you to understand each piece explicitly: where it runs, how credentials are managed, how the pipeline is structured, how webhooks work. GitHub Actions or GitLab CI abstract most of that away, which is convenient in production but less instructive when learning. Jenkins is also the most common tool in enterprise environments, making it a valuable skill regardless of the project.
+
 ---
 
 ## AWS Infrastructure
