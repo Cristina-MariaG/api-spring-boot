@@ -45,8 +45,8 @@ if [ -n "$OBJECTS" ]; then
 fi
 echo "    bucket vidé !"
 
-# ─── 3. Backend destroy (S3 + DynamoDB) ──────────────────────────────────────
-echo "==> Destruction du backend (S3 + DynamoDB)..."
+# ─── 3. Backend destroy (S3) ─────────────────────────────────────────────────
+echo "==> Destruction du backend (S3)..."
 cd "$TF_DIR/backend-setup"
 terraform plan -destroy -out=destroy-backend.plan
 terraform show destroy-backend.plan

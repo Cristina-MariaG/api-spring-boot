@@ -71,12 +71,9 @@ Creates the resources needed to store the Terraform state securely:
   - AES-256 encryption at rest
   - Public access fully blocked
 
-- **DynamoDB Table** `springboot-api-tf-lock`
-  - State lock: prevents two concurrent `terraform apply` runs
-
 ---
 
-## Why S3 + DynamoDB for Terraform state?
+## Why S3 for Terraform state?
 
 When Terraform creates resources, it needs to remember what it created. It records everything in a **state file** (`terraform.tfstate`): which EC2 instance exists, what its ID is, which Security Group is attached, etc. Without this file, Terraform has no idea what is already deployed and would try to create everything again from scratch.
 
@@ -94,32 +91,26 @@ S3 stores the `terraform.tfstate` file remotely instead of on your local disk. T
 - **AES-256 encryption at rest** — the state file can contain sensitive values (resource IDs, outputs). Encryption ensures they are not stored in plaintext.
 - **Public access fully blocked** — the bucket is not accessible from the internet under any circumstances.
 
-**DynamoDB — distributed lock**
+**S3 native lock (`use_lockfile`)**
 
-S3 alone is not enough. S3 is eventually consistent, which means two processes could read the same state file at nearly the same time, each make changes, and then both write back — overwriting each other's work.
-
-DynamoDB solves this with a **lock table**. Before any `terraform apply` or `terraform plan` can proceed, Terraform writes a lock entry to DynamoDB. If another process tries to run at the same time and finds the lock already held, it waits (or fails with a clear error). Once the first operation finishes, it releases the lock and the next process can proceed.
-
-The two work together like this:
+Since Terraform 1.10, state locking can be handled directly by S3 via a `.tflock` file — no DynamoDB table needed. Before any `terraform apply` or `terraform plan`, Terraform writes a lock file to S3. If another process finds the lock already held, it waits or fails with a clear error. Once the operation finishes, the lock file is deleted.
 
 ```
 terraform apply
       │
-      ├─ 1. Acquire lock          → write to DynamoDB
+      ├─ 1. Acquire lock          → write .tflock to S3
       │        └─ if lock exists  → wait or abort
       │
-      ├─ 2. Read current state    → download from S3
+      ├─ 2. Read current state    → download terraform.tfstate from S3
       │
       ├─ 3. Plan + apply changes  → create/update/destroy resources
       │
       ├─ 4. Write new state       → upload to S3 (new version created)
       │
-      └─ 5. Release lock          → delete from DynamoDB
+      └─ 5. Release lock          → delete .tflock from S3
 ```
 
-This is the standard pattern recommended by HashiCorp for any Terraform project beyond a single developer experimenting locally. Even when working alone, it protects against accidental concurrent runs and gives you a versioned history of every infrastructure change.
-
-In this project, the backend infrastructure (S3 bucket + DynamoDB table) is provisioned first, in a separate Terraform module (`aws/terraform/backend-setup/`), before the main infrastructure is applied. This is intentional: the backend must exist before Terraform can use it to store the state of the main module.
+In this project, the backend infrastructure (S3 bucket) is provisioned first, in a separate Terraform module (`aws/terraform/backend-setup/`), before the main infrastructure is applied. This is intentional: the backend must exist before Terraform can use it to store the state of the main module.
 
 ### `main.tf` — Application infrastructure
 

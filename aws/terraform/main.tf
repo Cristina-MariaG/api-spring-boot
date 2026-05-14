@@ -15,7 +15,7 @@ terraform {
     key            = "terraform.tfstate"
     region         = "eu-west-3"
     encrypt        = true
-    dynamodb_table = "springboot-api-tf-lock"
+    use_lockfile   = true
   }
 }
 
