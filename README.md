@@ -156,8 +156,11 @@ All endpoints under `/api/*` require the `X-API-KEY` header. Swagger UI is publi
 ```bash
 cp .env.example .env
 # Edit .env: fill in DB_NAME, DB_USER, DB_PASSWORD, API_KEY
+./mvnw clean package -DskipTests   # build the JAR first — required by the Dockerfile
 docker compose up --build
 ```
+
+> The `Dockerfile` copies the JAR from `target/` — it does not compile the code itself. The `./mvnw clean package` step must run before `docker compose up --build`, otherwise the build will fail with a missing file error.
 
 The API will be available at `http://localhost:8081`.
 Swagger UI: `http://localhost:8081/swagger-ui/index.html`
