@@ -11,5 +11,6 @@ aws/ansible/inventory.ini
 # Terraform
 *.tfstate
 *.tfstate.backup
+*.plan
 .terraform/
 .terraform.lock.hcl
