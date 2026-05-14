@@ -28,7 +28,7 @@ echo "==> Terraform apply..."
 terraform apply -auto-approve
 
 # ─── 3. Copie et sécurisation de la clé PEM ─────────────────────────────────
-cp "$SCRIPT_DIR/../springboot-api.pem" "$PEM_FILE"
+cp "$SCRIPT_DIR/springboot-api.pem" "$PEM_FILE"
 chmod 600 "$PEM_FILE"
 
 # ─── 4. Récupération de l'IP ─────────────────────────────────────────────────

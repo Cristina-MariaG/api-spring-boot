@@ -62,7 +62,7 @@ rm -f destroy-backend.plan
 
 # ─── 3. Nettoyage local ───────────────────────────────────────────────────────
 echo "==> Nettoyage des fichiers locaux..."
-rm -f "$SCRIPT_DIR/../springboot-api.pem"
+rm -f "$SCRIPT_DIR/springboot-api.pem"
 rm -f "$HOME/.ssh/springboot-api.pem"
 rm -f "$SCRIPT_DIR/ansible/inventory.ini"
 

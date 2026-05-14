@@ -54,7 +54,7 @@ resource "aws_key_pair" "deployer" {
 # Sauvegarde la clé privée localement
 resource "local_file" "private_key" {
   content         = tls_private_key.ssh_key.private_key_pem
-  filename        = "${path.module}/../../${var.project_name}.pem"
+  filename        = "${path.module}/../${var.project_name}.pem"
   file_permission = "0600"
 }
 
