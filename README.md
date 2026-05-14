@@ -110,6 +110,8 @@ See [`JENKINS_SETUP.md`](JENKINS_SETUP.md) for initial Jenkins configuration (pl
 
 ## AWS Infrastructure
 
+**Requires:** [Terraform](https://developer.hashicorp.com/terraform/install), [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/), and [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) configured with an account that has EC2, S3, DynamoDB, and IAM permissions (`aws configure`).
+
 Everything is provisioned with a single command from your local machine:
 
 ```bash
@@ -153,6 +155,8 @@ All endpoints under `/api/*` require the `X-API-KEY` header. Swagger UI is publi
 
 ### Run locally with Docker Compose
 
+**Requires:** Docker Desktop (or Docker Engine), Java 21, Maven.
+
 ```bash
 cp .env.example .env
 # Edit .env: fill in DB_NAME, DB_USER, DB_PASSWORD, API_KEY
@@ -166,6 +170,8 @@ The API will be available at `http://localhost:8081`.
 Swagger UI: `http://localhost:8081/swagger-ui/index.html`
 
 ### Run Jenkins locally
+
+**Requires:** Docker Desktop (or Docker Engine). Jenkins itself runs inside a container — nothing else to install. To receive GitHub webhooks while running locally, expose port 8080 with [ngrok](https://ngrok.com) (`ngrok http 8080`).
 
 ```bash
 ./jenkins_local/jenkins_start.sh   # starts Jenkins at http://localhost:8080
