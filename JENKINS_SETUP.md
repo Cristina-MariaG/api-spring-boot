@@ -5,6 +5,7 @@
 - Docker installed on your machine
 - A GitHub account with a repository containing a `Jenkinsfile`
 - An AWS EC2 server (for deployment)
+- [ngrok](https://ngrok.com) — to expose Jenkins to GitHub webhooks when running locally
 
 ---
 
