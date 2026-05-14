@@ -1,88 +1,288 @@
-# Spring Boot API — CI/CD & Infrastructure DevOps
+# Spring Boot REST API — Full DevOps Pipeline on AWS
 
-Ce projet est conçu pour mettre en place une chaîne DevOps complète autour d'une API REST Spring Boot. L'objectif n'est pas seulement de faire tourner l'application, mais de couvrir chaque brique de l'infrastructure :
+A DevOps project built around an existing Spring Boot 3.2 / Java 21 REST API. The application itself is not the focus — the goal was to build a complete CI/CD pipeline around it using Jenkins, deploy it automatically to AWS EC2, and provision the entire infrastructure with Terraform and Ansible.
 
-- **Jenkins** — pipeline CI/CD déclenché automatiquement à chaque push GitHub
-- **Terraform** — provisionnement automatique d'une instance EC2 sur AWS (Elastic IP, Security Group, clé PEM, bucket S3 + table DynamoDB pour le state)
-- **Ansible** — configuration du serveur distant (installation de Docker CE, démarrage automatique, ajout de l'utilisateur au groupe docker)
-- **Docker / Docker Compose** — conteneurisation de l'application et de la base PostgreSQL
-- **Spring Boot 3.2 / Java 21** — API REST avec gestion des utilisateurs et contacts, sécurisée par clé API
+> The Spring Boot application was used as a realistic deployment target. The work covered here is the pipeline, the infrastructure, the containerization, and the automation — not the backend code itself.
+
+![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2-brightgreen?logo=springboot&logoColor=white)
+![Jenkins](https://img.shields.io/badge/Jenkins-CI%2FCD-D33833?logo=jenkins&logoColor=white)
+![Terraform](https://img.shields.io/badge/Terraform-IaC-7B42BC?logo=terraform&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-EC2-FF9900?logo=amazonwebservices&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+
+---
+
+## Overview
+
+The Spring Boot application (Users and Contacts CRUD API) was taken as-is and used as a realistic deployment target. The objective of this project was to build everything *around* it:
+
+- **CI/CD with Jenkins** — pipeline triggered on every GitHub push: build → transfer → deploy → health check
+- **Infrastructure as Code** — Terraform provisions all AWS resources from scratch; Ansible configures the server
+- **Containerization** — Docker Compose running the app and PostgreSQL 16 with health checks and restart policies
+- **Secret management** — no credentials in code or git history; everything flows through Jenkins credentials
+- **One-command provisioning** — `./aws/setup-infra.sh` chains Terraform + Ansible and leaves a server ready to receive deployments
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Language | Java 21 |
+| Framework | Spring Boot 3.2 |
+| Database | PostgreSQL 16 |
+| ORM | Spring Data JPA / Hibernate |
+| Security | Spring Security Crypto (BCrypt), custom API Key filter |
+| API Docs | SpringDoc OpenAPI 2.3 / Swagger UI |
+| Build | Maven Wrapper |
+| Containerization | Docker, Docker Compose |
+| CI/CD | Jenkins (runs in Docker locally) |
+| Infrastructure | Terraform, Ansible |
+| Cloud | AWS EC2, Elastic IP, S3, DynamoDB |
 
 ---
 
 ## Architecture
 
 ```
-Push GitHub
-    ↓
-Jenkins (local via Docker)
-    ↓
- ┌──────────────────────────┐
- │  1. Checkout             │
- │  2. Build (Maven → .jar) │
- │  3. Transfer (SCP)       │
- │  4. Deploy (SSH)         │
- │  5. Health check         │
- └──────────────────────────┘
-    ↓
-EC2 AWS (Ubuntu 22.04)
-    ↓
-Docker Compose (app + PostgreSQL)
+GitHub Push
+     │
+     ▼
+Jenkins (Docker, localhost:8080)
+     │
+     ├─ 1. Checkout  ─── clone via GitHub token
+     ├─ 2. Build     ─── Maven → store-0.0.1-SNAPSHOT.jar
+     ├─ 3. Prepare   ─── generate deploy.sh
+     ├─ 4. Transfer  ─── SCP → JAR + Dockerfile + docker-compose.yml + .env
+     └─ 5. Deploy    ─── SSH → docker compose down && up --build
+                                        │
+                                        ▼
+                              AWS EC2 (Ubuntu 22.04)
+                                        │
+                              ┌─────────┴──────────┐
+                              │    Docker Compose   │
+                              ├────────────────────-┤
+                              │  app  → port 8081   │
+                              │  db   → PostgreSQL  │
+                              └────────────────────-┘
 ```
+
+**Terraform provisions:**
+- EC2 `t2.micro` (Ubuntu 22.04 LTS, dynamic Canonical AMI)
+- Elastic IP — fixed public address attached to the instance
+- Security Group — SSH restricted to your IP, port 8081 open
+- S3 bucket + DynamoDB table — remote Terraform state with locking and AES-256 encryption
+- RSA 4096 key pair — generated by Terraform, stored as a Jenkins credential
+
+**Ansible configures (on the EC2 after provisioning):**
+- Docker CE + Compose plugin (official Docker repository)
+- Docker auto-start at boot via systemd
+- `ubuntu` user added to the `docker` group
 
 ---
 
-## Lancer Jenkins en local
+## CI/CD Pipeline
 
-Un dossier `jenkins_local/` contient des scripts prêts à l'emploi pour démarrer Jenkins dans Docker sans aucune installation manuelle :
+The `Jenkinsfile` defines a 5-stage pipeline triggered automatically on every GitHub push via webhook:
+
+| Stage | What it does |
+|-------|-------------|
+| **Checkout** | Clones the repository using a GitHub token credential |
+| **Build** | `./mvnw clean package` — runs tests, then produces the JAR |
+| **Prepare Deployment** | Generates `deploy.sh` (`docker compose down && up -d --build`) |
+| **Transfer Files** | SCP the JAR, Dockerfile, `docker-compose.yml`, and `.env` to EC2 |
+| **Deploy to Staging** | SSH-executes `deploy.sh`, waits 30s, then hits `/actuator/health` (expects HTTP 200) |
+
+**Jenkins credentials required:**
+
+| Credential ID | Type | Used for |
+|--------------|------|---------|
+| `github-token-id` | Secret text | GitHub repository clone |
+| `server-ip-id` | Secret text | EC2 IP (auto-updated by `setup-infra.sh`) |
+| `aws-ec2-pem` | SSH private key | SCP and SSH access to EC2 |
+| `env-file-id` | Secret file | `.env` file transferred at deploy time |
+
+See [`JENKINS_SETUP.md`](JENKINS_SETUP.md) for initial Jenkins configuration (plugins, credentials, GitHub webhook).
+
+---
+
+## AWS Infrastructure
+
+Everything is provisioned with a single command from your local machine:
 
 ```bash
-./jenkins_local/jenkins_start.sh   # démarre Jenkins
-./jenkins_local/jenkins_stop.sh    # arrête Jenkins
-./jenkins_local/jenkins_logs.sh    # affiche les logs
+./aws/setup-infra.sh
 ```
 
-Jenkins sera accessible sur `http://localhost:8080`.
+This chains automatically: Terraform → PEM copy → EC2 IP sync into Jenkins → Ansible inventory → SSH wait → Ansible playbook. The server is ready to receive deployments when the script finishes.
 
----
-
-## Provisionner l'infrastructure AWS
-
-Tout est dans le dossier `aws/`. Un README dédié (`aws/README.md`) documente chaque étape en détail : ce que Terraform crée, ce qu'Ansible configure, et comment les scripts fonctionnent.
+To tear everything down:
 
 ```bash
-./aws/setup-infra.sh     # crée toute l'infra from scratch
-./aws/destroy-infra.sh   # détruit toute l'infra (avec confirmation)
+./aws/destroy-infra.sh   # prompts for confirmation before destroying
 ```
 
-`setup-infra.sh` enchaîne automatiquement : Terraform → copie de la clé PEM → synchronisation de l'IP dans Jenkins → génération de l'inventaire Ansible → attente SSH → playbook Ansible.
+**What `setup-infra.sh` does, step by step:**
+
+| Step | Action |
+|------|--------|
+| 1 | `terraform apply` on `backend-setup` → S3 bucket + DynamoDB table |
+| 2 | `terraform apply` on `main` → EC2, Elastic IP, Security Group, key pair |
+| 3 | Copy PEM to `~/springboot-api.pem` with `chmod 600` |
+| 4 | Retrieve Elastic IP via `terraform output` |
+| 5 | Create or update `server-ip-id` credential in Jenkins via REST API |
+| 6 | Generate `aws/ansible/inventory.ini` |
+| 7 | Wait for SSH to be available on the instance (polls every 10s) |
+| 8 | Run `ansible-playbook install.yml` to configure Docker on the server |
+
+See [`aws/README.md`](aws/README.md) for the full infrastructure breakdown.
 
 ---
 
-## Credentials Jenkins requis
+## Why S3 + DynamoDB for Terraform State?
 
-| ID Jenkins | Type | Contenu |
-|---|---|---|
-| `github-token-id` | Secret text | Token GitHub |
-| `server-ip-id` | Secret text | IP EC2 (mis à jour automatiquement par `setup-infra.sh`) |
-| `aws-ec2-pem` | SSH private key | Clé PEM générée par Terraform |
-| `env-file-id` | Secret file | Fichier `.env` de l'application |
+When Terraform creates resources, it needs to remember what it created. It records everything in a **state file** (`terraform.tfstate`): which EC2 instance exists, what its ID is, which Security Group is attached, etc. Without this file, Terraform has no idea what is already deployed and would try to create everything again from scratch.
+
+By default, this file is stored locally on your machine. That works for experimenting, but creates real problems as soon as more than one person (or process) touches the infrastructure:
+
+- If the file is lost (disk failure, accidental deletion), Terraform loses track of all existing resources — you can no longer update or destroy them cleanly
+- If two `terraform apply` commands run at the same time (e.g., you and a teammate, or two CI jobs), they can both read the state before either has written back their changes, leading to conflicts and corrupted state
+
+The solution is a **remote backend**: store the state file somewhere reliable and add a lock so only one operation can run at a time. AWS offers exactly the right primitives for this:
+
+**S3 — remote storage for the state file**
+
+S3 stores the `terraform.tfstate` file remotely instead of on your local disk. The bucket in this project is configured with:
+- **Versioning enabled** — every `terraform apply` creates a new version of the state file. If a deployment corrupts the state, you can roll back to any previous version.
+- **AES-256 encryption at rest** — the state file often contains sensitive values (resource IDs, outputs). Encryption ensures they are not stored in plaintext.
+- **Public access fully blocked** — the bucket is not accessible from the internet under any circumstances.
+
+**DynamoDB — distributed lock**
+
+S3 alone is not enough. S3 is eventually consistent, which means two processes could read the same state file at nearly the same time, each make changes, and then both write back — overwriting each other's work.
+
+DynamoDB solves this with a **lock table**. Before any `terraform apply` or `terraform plan` can proceed, Terraform writes a lock entry to DynamoDB. If another process tries to run at the same time and finds the lock already held, it waits (or fails with a clear error). Once the first operation finishes, it deletes the lock and the next process can proceed.
+
+The two work together like this:
+
+```
+terraform apply
+      │
+      ├─ 1. Try to acquire lock   → write to DynamoDB
+      │        └─ if lock exists  → wait or abort
+      │
+      ├─ 2. Read current state    → download from S3
+      │
+      ├─ 3. Plan + apply changes  → create/update/destroy resources
+      │
+      ├─ 4. Write new state       → upload to S3 (creates new version)
+      │
+      └─ 5. Release lock          → delete from DynamoDB
+```
+
+This setup is the standard pattern recommended by HashiCorp for any Terraform project beyond a single developer experimenting locally. Even when working alone, it protects against accidental concurrent runs (e.g., running `terraform apply` twice in two terminals) and gives you a versioned history of every infrastructure change.
+
+In this project, the backend infrastructure (S3 bucket + DynamoDB table) is provisioned first, in a separate Terraform module (`aws/terraform/backend-setup/`), before the main infrastructure is applied. This is intentional: the backend must exist before Terraform can use it to store the state of the main module.
 
 ---
 
-## Variables d'environnement
+## API Endpoints
 
-Copier `.env.example` en `.env` et remplir les valeurs :
+All endpoints under `/api/*` require the `X-API-KEY` header. Swagger UI is publicly accessible at `/swagger-ui/index.html`.
+
+**Users** — `/api/users`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/users` | Create a user (password is BCrypt-hashed) |
+| `GET` | `/api/users` | List all users |
+| `GET` | `/api/users/{id}` | Get a user by ID |
+| `PUT` | `/api/users/{id}` | Update a user |
+| `DELETE` | `/api/users/{id}` | Delete a user |
+
+**Contacts** — `/api/contacts`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/contacts` | Create a contact (linked to a user) |
+| `GET` | `/api/contacts` | List all contacts |
+| `GET` | `/api/contacts/{id}` | Get a contact by ID |
+| `PUT` | `/api/contacts/{id}` | Update a contact |
+| `DELETE` | `/api/contacts/{id}` | Delete a contact |
+
+---
+
+## Getting Started
+
+### Run locally with Docker Compose
 
 ```bash
 cp .env.example .env
+# Edit .env: fill in DB_NAME, DB_USER, DB_PASSWORD, API_KEY
+docker compose up --build
 ```
 
-Variables requises : `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SPRING_DATASOURCE_URL`, `API_KEY`.
+The API will be available at `http://localhost:8081`.
+Swagger UI: `http://localhost:8081/swagger-ui/index.html`
+
+### Run Jenkins locally
+
+```bash
+./jenkins_local/jenkins_start.sh   # starts Jenkins at http://localhost:8080
+./jenkins_local/jenkins_stop.sh    # stops Jenkins
+./jenkins_local/jenkins_logs.sh    # tails logs
+```
+
+### Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `DB_NAME` | PostgreSQL database name |
+| `DB_USER` | PostgreSQL username |
+| `DB_PASSWORD` | PostgreSQL password |
+| `SPRING_DATASOURCE_URL` | JDBC URL — defaults to `jdbc:postgresql://db:5432/${DB_NAME}` |
+| `API_KEY` | Secret key sent in the `X-API-KEY` header on all `/api/*` requests |
+
+---
+
+## Security
+
+No secrets are hardcoded or committed to the repository. Each secret lives in the layer that owns it:
+
+| Secret | How it's handled |
+|--------|-----------------|
+| App credentials (`.env`) | Jenkins secret file credential (`env-file-id`), SCP'd to EC2 at deploy time |
+| EC2 PEM key | Generated by Terraform, stored as Jenkins SSH credential (`aws-ec2-pem`), in `.gitignore` |
+| GitHub token | Jenkins credential (`github-token-id`), injected via `withCredentials`, never printed in logs |
+| EC2 IP | Jenkins credential (`server-ip-id`), auto-updated by `setup-infra.sh` after each `terraform apply` |
+
+SSH access uses the PEM key (no password). `ssh-keyscan` populates `known_hosts` before each connection — no `StrictHostKeyChecking=no`. The Security Group restricts SSH (port 22) to your IP only; ports 80 and 443 are not open.
+
+---
+
+## Project Structure
+
+```
+.
+├── src/                        # Spring Boot application source
+├── aws/
+│   ├── terraform/              # EC2, EIP, Security Group, key pair, S3 backend, DynamoDB
+│   ├── ansible/install.yml     # Docker CE installation and configuration on EC2
+│   ├── setup-infra.sh          # One-command provisioning (Terraform + Ansible)
+│   └── destroy-infra.sh        # One-command teardown
+├── jenkins_local/              # Scripts to run Jenkins in Docker locally
+├── Jenkinsfile                 # CI/CD pipeline definition
+├── Dockerfile                  # App image (eclipse-temurin:21-jre-jammy)
+├── docker-compose.yml          # App + PostgreSQL services
+├── JENKINS_SETUP.md            # Jenkins initial configuration guide
+└── .env.example                # Environment variable template
+```
 
 ---
 
 ## Documentation
 
-- `aws/README.md` — infrastructure Terraform + Ansible, scripts setup/destroy, détail de chaque ressource créée
-- `JENKINS_SETUP.md` — configuration initiale de Jenkins (plugins, credentials, webhook GitHub)
+- [`aws/README.md`](aws/README.md) — Terraform resources, Ansible playbook, setup and destroy scripts in detail
+- [`JENKINS_SETUP.md`](JENKINS_SETUP.md) — Jenkins plugins, credentials setup, GitHub webhook configuration

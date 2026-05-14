@@ -18,7 +18,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh 'chmod +x mvnw && sed -i "s/\r//" mvnw && ./mvnw clean package -DskipTests'
+                sh 'chmod +x mvnw && sed -i "s/\r//" mvnw && ./mvnw clean package'
             }
         }
 
