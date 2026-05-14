@@ -55,7 +55,7 @@ Jenkins (Docker, localhost:8080)
      ├─ 1. Checkout  ─── clone via GitHub token
      ├─ 2. Build     ─── Maven → store-0.0.1-SNAPSHOT.jar
      ├─ 3. Prepare   ─── generate deploy.sh
-     ├─ 4. Transfer  ─── SCP → JAR + Dockerfile + docker-compose.yml + .env
+     ├─ 4. Transfer  ─── SCP → JAR + Dockerfile + docker-compose.yml 
      └─ 5. Deploy    ─── SSH → docker compose down && up --build
                                         │
                                         ▼
@@ -229,6 +229,63 @@ In this project, Jenkins runs locally in Docker on your own machine. This is fin
 The natural next step would be to run Jenkins on its own dedicated EC2 instance, provisioned the same way as the application server (Terraform + Ansible), with BunkerWeb or Nginx in front to protect the Jenkins UI from the internet.
 
 This was deliberately left out for one practical reason: **cost**. Running a permanent EC2 instance for Jenkins (even a `t2.micro`) adds to the AWS bill every hour. For a personal learning project, keeping Jenkins local avoids unnecessary spending while still covering everything the pipeline needs to do.
+
+### Docker image registry
+
+Currently the Docker image is built directly on the EC2 server at each deployment (`docker compose up --build`). This means the production server does the build — it pulls the source code, compiles, and constructs the image every time.
+
+The proper approach is to build the image once in Jenkins, push it to a registry, and have the server only pull the already-built image:
+
+```
+Jenkins build JAR
+      │
+      ▼
+Jenkins build Docker image
+      │
+      ▼
+Push image → registry (AWS ECR, Docker Hub, GitHub Container Registry)
+      │
+      ▼
+EC2: docker pull image:v1.2 && docker compose up
+```
+
+This has several advantages: the server no longer needs build tools, every image gets a unique tag (commit SHA, build number), and rollback becomes trivial — just pull a previous tag.
+
+### Rollback strategy
+
+There is currently no rollback mechanism. If the health check fails, the deployment stops, but the previous containers are already down. The server is left in a broken state.
+
+With an image registry and tagged images, rollback is straightforward: the pipeline stores the previous image tag, and if the health check fails it automatically re-deploys the last known good version. Without a registry, an alternative is to keep a copy of the previous JAR on the server and re-run `docker compose up` with it if the deployment fails.
+
+### Secrets management with AWS
+
+The application currently receives its secrets through a `.env` file transferred via SCP and stored on disk on the EC2 instance. Two AWS-native alternatives remove the need for this file entirely:
+
+- **AWS Secrets Manager** — secrets (database credentials, API keys) are stored centrally in AWS and retrieved by the application at runtime via the AWS SDK. Nothing is stored on disk. Secrets can be rotated without redeploying.
+- **AWS Systems Manager Parameter Store** — a lighter alternative for non-sensitive configuration values. Free for standard parameters, with optional encryption via KMS for sensitive ones.
+
+Both approaches also eliminate the need to transfer a `.env` file through Jenkins, since the EC2 instance retrieves its own secrets directly from AWS using its IAM role.
+
+### Staging and production environments
+
+This project deploys to a single environment. In a real setup, you would have at least two: staging and production, each on its own EC2 instance, with the pipeline deploying to staging first and promoting to production only after the health check passes.
+
+```
+push to main
+      │
+      ▼
+Jenkins build + tests
+      │
+      ▼
+Deploy → EC2 staging → health check ✓
+      │
+      ▼
+Deploy → EC2 production → health check ✓
+```
+
+The Terraform structure would mirror this with separate directories per environment (`aws/terraform/staging/`, `aws/terraform/production/`), each with their own state, variables, and EC2 instance. Jenkins would hold separate credentials for each (`server-ip-staging`, `server-ip-prod`) and separate `.env` files.
+
+This was left out for the same reason as the dedicated Jenkins server: **cost**. A second EC2 instance running permanently doubles the infrastructure bill. For a learning project focused on Jenkins, a single environment is sufficient to cover everything the pipeline needs to demonstrate.
 
 ---
 
