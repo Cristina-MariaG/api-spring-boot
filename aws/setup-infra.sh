@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TF_DIR="$SCRIPT_DIR/terraform"
 ANSIBLE_DIR="$SCRIPT_DIR/ansible"
-PEM_FILE="$HOME/springboot-api.pem"
+PEM_FILE="$HOME/.ssh/springboot-api.pem"
 
 # ─── Config Jenkins ───────────────────────────────────────────────────────────
 if [ ! -f "$SCRIPT_DIR/.env.infra" ]; then
@@ -97,5 +97,5 @@ ansible-playbook -i "$ANSIBLE_DIR/inventory.ini" "$ANSIBLE_DIR/install.yml"
 # ─── 8. Résumé ───────────────────────────────────────────────────────────────
 echo ""
 echo "✓ Infra prête !"
-echo "  SSH    : ssh -i ../springboot-api.pem ubuntu@$EC2_IP"
+echo "  SSH    : ssh -i ~/.ssh/springboot-api.pem ubuntu@$EC2_IP"
 echo "  App    : http://$EC2_IP:8081/swagger-ui/index.html"

@@ -171,7 +171,7 @@ To tear everything down:
 |------|--------|
 | 1 | `terraform apply` on `backend-setup` → S3 bucket + DynamoDB table |
 | 2 | `terraform apply` on `main` → EC2, Elastic IP, Security Group, key pair |
-| 3 | Copy PEM to `~/springboot-api.pem` with `chmod 600` |
+| 3 | Copy PEM to `~/.ssh/springboot-api.pem` with `chmod 600` |
 | 4 | Retrieve Elastic IP via `terraform output` |
 | 5 | Create or update `server-ip-id` credential in Jenkins via REST API |
 | 6 | Generate `aws/ansible/inventory.ini` |
