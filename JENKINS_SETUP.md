@@ -1,301 +1,301 @@
-# Jenkins — Guide de mise en place complet
+# Jenkins — Complete Setup Guide
 
-## Prérequis
+## Prerequisites
 
-- Docker installé sur ta machine
-- Un compte GitHub avec un repo contenant un `Jenkinsfile`
-- Un serveur EC2 AWS (pour le déploiement)
+- Docker installed on your machine
+- A GitHub account with a repository containing a `Jenkinsfile`
+- An AWS EC2 server (for deployment)
 
 ---
 
-## Étape 1 — Démarrer Jenkins en local via Docker
+## Step 1 — Start Jenkins locally via Docker
 
-Le dossier `jenkins_local/` contient trois scripts prêts à l'emploi :
+The `jenkins_local/` folder contains three ready-to-use scripts:
 
 ```bash
-./jenkins_local/jenkins_start.sh   # démarre Jenkins (crée le volume si besoin, relance si déjà existant)
-./jenkins_local/jenkins_stop.sh    # arrête Jenkins (données conservées dans le volume)
-./jenkins_local/jenkins_logs.sh    # affiche les logs en temps réel
+./jenkins_local/jenkins_start.sh   # starts Jenkins (creates volume if needed, restarts if already exists)
+./jenkins_local/jenkins_stop.sh    # stops Jenkins (data is preserved in the volume)
+./jenkins_local/jenkins_logs.sh    # tails logs in real time
 ```
 
-Le script `jenkins_start.sh` gère automatiquement :
-- Le démarrage de Docker Desktop si Docker ne répond pas (WSL/Windows)
-- La création du volume `jenkins-data` si c'est le premier lancement
-- Le redémarrage du container si il existe déjà mais est arrêté
-- L'affichage du mot de passe initial à la fin
+`jenkins_start.sh` automatically handles:
+- Starting Docker Desktop if Docker is not responding (WSL/Windows)
+- Creating the `jenkins-data` volume on first launch
+- Restarting the container if it already exists but is stopped
+- Printing the initial admin password at the end
 
-Accède à Jenkins :
+Access Jenkins at:
 ```
 http://localhost:8080
 ```
 
 ---
 
-## Étape 2 — Déverrouiller Jenkins
+## Step 2 — Unlock Jenkins
 
-Le mot de passe initial est affiché automatiquement à la fin de `jenkins_start.sh`. Si tu en as besoin à nouveau :
+The initial password is printed automatically at the end of `jenkins_start.sh`. If you need it again:
 
 ```bash
 docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
-Colle ce mot de passe dans la page Jenkins qui s'affiche.
+Paste this password into the Jenkins unlock page.
 
 ---
 
-## Étape 3 — Installer les plugins
+## Step 3 — Install plugins
 
-Sur la page "Customize Jenkins", choisis :
+On the "Customize Jenkins" page, select:
 
 ```
 Install suggested plugins
 ```
 
-Attends la fin de l'installation, puis crée ton compte administrateur.
+Wait for the installation to complete, then create your admin account.
 
 ---
 
-## Étape 4 — Installer les plugins supplémentaires
+## Step 4 — Install additional plugins
 
-Certains plugins sont nécessaires pour ce projet :
+Some plugins are required for this project:
 
 ```
 Manage Jenkins → Plugins → Available plugins
 ```
 
-Recherche et installe :
+Search for and install:
 
-| Plugin | Rôle |
-|---|---|
-| `GitHub Integration Plugin` | Webhook GitHub → Jenkins |
-| `SSH Agent Plugin` | Connexion SSH au serveur EC2 |
-| `Credentials Binding Plugin` | Injection sécurisée des secrets |
-| `Workspace Cleanup Plugin` | Nettoyage du workspace (`cleanWs()`) |
+| Plugin | Purpose |
+|--------|---------|
+| `GitHub Integration Plugin` | GitHub webhook → Jenkins trigger |
+| `SSH Agent Plugin` | SSH connection to the EC2 server |
+| `Credentials Binding Plugin` | Secure injection of secrets into pipelines |
+| `Workspace Cleanup Plugin` | Workspace cleanup (`cleanWs()`) |
 
-Redémarre Jenkins après installation :
+Restart Jenkins after installation:
 ```bash
 docker restart jenkins
 ```
 
 ---
 
-## Étape 5 — Installer Maven dans Jenkins
+## Step 5 — Install Maven in Jenkins
 
-Maven doit être installé dans le container Jenkins pour pouvoir builder le projet.
+Maven must be installed inside the Jenkins container to build the project.
 
 ```
 Manage Jenkins → Tools → Maven installations → Add Maven
 ```
 
-- **Name** : `Maven`
-- **Install automatically** : coché
-- **Version** : `3.9.6` (ou la dernière stable)
+- **Name**: `Maven`
+- **Install automatically**: checked
+- **Version**: `3.9.6` (or latest stable)
 
-Clique **Save**.
+Click **Save**.
 
 ---
 
-## Étape 6 — Configurer les Credentials
+## Step 6 — Configure Credentials
 
-Tous les secrets sont stockés dans Jenkins, jamais dans le code.
+All secrets are stored in Jenkins — never in the code.
 
 ```
 Manage Jenkins → Credentials → System → Global credentials → Add Credentials
 ```
 
-### Credential 1 — Token GitHub
+### Credential 1 — GitHub Token
 
-| Champ | Valeur |
-|---|---|
+| Field | Value |
+|-------|-------|
 | Kind | `Secret text` |
-| Secret | ton token GitHub (`ghp_xxxxxxxxxxxx`) |
+| Secret | your GitHub token (`ghp_xxxxxxxxxxxx`) |
 | ID | `github-token-id` |
 | Description | `GitHub Token` |
 
-> Génère le token sur GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → scope `repo`
+> Generate the token on GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → scope `repo`
 
 ---
 
-### Credential 2 — IP du serveur EC2
+### Credential 2 — EC2 Server IP
 
-| Champ | Valeur |
-|---|---|
+| Field | Value |
+|-------|-------|
 | Kind | `Secret text` |
-| Secret | l'IP publique de ton EC2 (ex: `54.123.45.67`) |
+| Secret | your EC2 public IP (e.g. `54.123.45.67`) |
 | ID | `server-ip-id` |
 | Description | `Server IP` |
 
 ---
 
-### Credential 3 — Clé PEM AWS
+### Credential 3 — AWS PEM Key
 
-| Champ | Valeur |
-|---|---|
+| Field | Value |
+|-------|-------|
 | Kind | `SSH Username with private key` |
 | ID | `aws-ec2-pem` |
 | Username | `ubuntu` |
-| Private Key | `Enter directly` → colle le contenu du fichier `.pem` |
+| Private Key | `Enter directly` → paste the content of the `.pem` file |
 | Description | `AWS EC2 PEM Key` |
 
-> La clé PEM est générée automatiquement par Terraform et copiée dans `~/springboot-api.pem` par `setup-infra.sh`. Utilise `cat ~/springboot-api.pem` pour récupérer son contenu.
+> The PEM key is automatically generated by Terraform and copied to `~/springboot-api.pem` by `setup-infra.sh`. Use `cat ~/springboot-api.pem` to retrieve its content.
 
-> **Important** : la clé doit être au format **RSA PEM** et commencer par `-----BEGIN RSA PRIVATE KEY-----`. Si elle commence par `-----BEGIN OPENSSH PRIVATE KEY-----`, convertis-la avec :
+> **Important**: the key must be in **RSA PEM** format and begin with `-----BEGIN RSA PRIVATE KEY-----`. If it begins with `-----BEGIN OPENSSH PRIVATE KEY-----`, convert it with:
 > ```bash
 > ssh-keygen -p -m PEM -f ~/springboot-api.pem
 > ```
 
 ---
 
-### Credential 4 — Fichier .env
+### Credential 4 — .env File
 
-| Champ | Valeur |
-|---|---|
+| Field | Value |
+|-------|-------|
 | Kind | `Secret file` |
-| File | le fichier `.env` de l'application |
+| File | the application `.env` file |
 | ID | `env-file-id` |
 | Description | `App .env file` |
 
-> Ce fichier est transféré via SCP sur le serveur EC2 à chaque déploiement. Il contient les variables `DB_*`, `API_KEY`, etc.
+> This file is transferred via SCP to the EC2 server on every deployment. It contains the `DB_*`, `API_KEY`, and other variables.
 
 ---
 
-## Étape 7 — Configurer le webhook GitHub
+## Step 7 — Configure the GitHub webhook
 
-Pour que Jenkins se déclenche automatiquement à chaque push :
+To have Jenkins trigger automatically on every push:
 
-### Côté GitHub
+### GitHub side
 
 ```
-Repo GitHub → Settings → Webhooks → Add webhook
+GitHub repo → Settings → Webhooks → Add webhook
 ```
 
-| Champ | Valeur |
-|---|---|
-| Payload URL | `http://<ton-ip-publique>:8080/github-webhook/` |
+| Field | Value |
+|-------|-------|
+| Payload URL | `http://<your-public-ip>:8080/github-webhook/` |
 | Content type | `application/json` |
 | Events | `Just the push event` |
 
-> Si Jenkins tourne en local, utilise [ngrok](https://ngrok.com) pour exposer le port 8080 :
+> If Jenkins is running locally, use [ngrok](https://ngrok.com) to expose port 8080:
 > ```bash
 > ngrok http 8080
 > ```
-> Puis utilise l'URL ngrok comme Payload URL.
+> Then use the ngrok URL as the Payload URL.
 
-### Côté Jenkins
+### Jenkins side
 
 ```
 Manage Jenkins → System → GitHub → Add GitHub Server
 ```
 
-- **API URL** : `https://api.github.com`
-- **Credentials** : sélectionne `github-token-id`
+- **API URL**: `https://api.github.com`
+- **Credentials**: select `github-token-id`
 
 ---
 
-## Étape 8 — Créer le Pipeline
+## Step 8 — Create the Pipeline
 
 ```
 Dashboard → New Item
 ```
 
-- **Nom** : `springboot-api`
-- **Type** : `Pipeline`
-- Clique **OK**
+- **Name**: `springboot-api`
+- **Type**: `Pipeline`
+- Click **OK**
 
-### Configuration du pipeline
+### Pipeline configuration
 
-**Section "Build Triggers" :**
-- Coche `GitHub hook trigger for GITScm polling`
+**"Build Triggers" section:**
+- Check `GitHub hook trigger for GITScm polling`
 
-**Section "Pipeline" :**
+**"Pipeline" section:**
 
-| Champ | Valeur |
-|---|---|
+| Field | Value |
+|-------|-------|
 | Definition | `Pipeline script from SCM` |
 | SCM | `Git` |
-| Repository URL | `https://github.com/<ton-user>/<ton-repo>.git` |
+| Repository URL | `https://github.com/<your-user>/<your-repo>.git` |
 | Credentials | `github-token-id` |
 | Branch | `*/main` |
 | Script Path | `Jenkinsfile` |
 
-Clique **Save**.
+Click **Save**.
 
 ---
 
-## Étape 9 — Premier build
+## Step 9 — First build
 
-Lance un build manuel pour vérifier que tout fonctionne :
+Trigger a manual build to verify everything works:
 
 ```
 Dashboard → springboot-api → Build Now
 ```
 
-Clique sur le build (`#1`) → **Console Output** pour suivre les logs en temps réel.
+Click the build (`#1`) → **Console Output** to follow the logs in real time.
 
 ---
 
-## Étape 10 — Vérifier le déploiement
+## Step 10 — Verify the deployment
 
-Si tout s'est bien passé, l'application est accessible sur le serveur EC2 :
+If everything went well, the application is accessible on the EC2 server:
 
 ```
 http://<SERVER_IP>:8081/swagger-ui/index.html
 ```
 
-Jenkins vérifie automatiquement cette URL à la fin du pipeline et échoue si elle ne répond pas HTTP 200.
+Jenkins automatically checks this URL at the end of the pipeline and fails if it does not return HTTP 200.
 
 ---
 
-## Résumé des credentials Jenkins requis
+## Jenkins credentials summary
 
-| ID | Type | Valeur |
-|---|---|---|
-| `github-token-id` | Secret text | Token GitHub |
-| `server-ip-id` | Secret text | IP publique EC2 |
-| `aws-ec2-pem` | SSH Username with private key | Contenu du fichier `.pem` (format RSA) |
-| `env-file-id` | Secret file | Fichier `.env` de l'application |
+| ID | Type | Value |
+|----|------|-------|
+| `github-token-id` | Secret text | GitHub token |
+| `server-ip-id` | Secret text | EC2 public IP |
+| `aws-ec2-pem` | SSH Username with private key | `.pem` file content (RSA format) |
+| `env-file-id` | Secret file | Application `.env` file |
 
 ---
 
-## Commandes utiles
+## Useful commands
 
 ```bash
-# Démarrer Jenkins
+# Start Jenkins
 ./jenkins_local/jenkins_start.sh
 
-# Arrêter Jenkins
+# Stop Jenkins
 ./jenkins_local/jenkins_stop.sh
 
-# Voir les logs Jenkins
+# Tail Jenkins logs
 ./jenkins_local/jenkins_logs.sh
 
-# Accéder au container Jenkins
+# Access the Jenkins container
 docker exec -it jenkins bash
 
-# Mot de passe initial (si nécessaire)
+# Initial password (if needed)
 docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
 ---
 
-## Flux complet
+## Full flow
 
 ```
-Push GitHub
+GitHub Push
     ↓
 Webhook → Jenkins
     ↓
-Checkout (clone repo avec token GitHub)
+Checkout (clone repo with GitHub token)
     ↓
 Build (./mvnw clean package → .jar)
     ↓
-Prepare Deployment (génère deploy.sh)
+Prepare Deployment (generate deploy.sh)
     ↓
-Transfer Files (SCP → EC2 via clé PEM)
+Transfer Files (SCP → EC2 via PEM key)
     ↓
 Deploy to Staging (SSH → docker compose restart)
     ↓
-Health Check (curl Swagger → HTTP 200 ✓)
+Health Check (curl /actuator/health → HTTP 200 ✓)
     ↓
 Clean Workspace
 ```

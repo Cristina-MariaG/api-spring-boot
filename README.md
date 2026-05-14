@@ -139,78 +139,13 @@ To tear everything down:
 
 See [`aws/README.md`](aws/README.md) for the full infrastructure breakdown.
 
----
-
-## Why S3 + DynamoDB for Terraform State?
-
-When Terraform creates resources, it needs to remember what it created. It records everything in a **state file** (`terraform.tfstate`): which EC2 instance exists, what its ID is, which Security Group is attached, etc. Without this file, Terraform has no idea what is already deployed and would try to create everything again from scratch.
-
-By default, this file is stored locally on your machine. That works for experimenting, but creates real problems as soon as more than one person (or process) touches the infrastructure:
-
-- If the file is lost (disk failure, accidental deletion), Terraform loses track of all existing resources — you can no longer update or destroy them cleanly
-- If two `terraform apply` commands run at the same time (e.g., you and a teammate, or two CI jobs), they can both read the state before either has written back their changes, leading to conflicts and corrupted state
-
-The solution is a **remote backend**: store the state file somewhere reliable and add a lock so only one operation can run at a time. AWS offers exactly the right primitives for this:
-
-**S3 — remote storage for the state file**
-
-S3 stores the `terraform.tfstate` file remotely instead of on your local disk. The bucket in this project is configured with:
-- **Versioning enabled** — every `terraform apply` creates a new version of the state file. If a deployment corrupts the state, you can roll back to any previous version.
-- **AES-256 encryption at rest** — the state file often contains sensitive values (resource IDs, outputs). Encryption ensures they are not stored in plaintext.
-- **Public access fully blocked** — the bucket is not accessible from the internet under any circumstances.
-
-**DynamoDB — distributed lock**
-
-S3 alone is not enough. S3 is eventually consistent, which means two processes could read the same state file at nearly the same time, each make changes, and then both write back — overwriting each other's work.
-
-DynamoDB solves this with a **lock table**. Before any `terraform apply` or `terraform plan` can proceed, Terraform writes a lock entry to DynamoDB. If another process tries to run at the same time and finds the lock already held, it waits (or fails with a clear error). Once the first operation finishes, it deletes the lock and the next process can proceed.
-
-The two work together like this:
-
-```
-terraform apply
-      │
-      ├─ 1. Try to acquire lock   → write to DynamoDB
-      │        └─ if lock exists  → wait or abort
-      │
-      ├─ 2. Read current state    → download from S3
-      │
-      ├─ 3. Plan + apply changes  → create/update/destroy resources
-      │
-      ├─ 4. Write new state       → upload to S3 (creates new version)
-      │
-      └─ 5. Release lock          → delete from DynamoDB
-```
-
-This setup is the standard pattern recommended by HashiCorp for any Terraform project beyond a single developer experimenting locally. Even when working alone, it protects against accidental concurrent runs (e.g., running `terraform apply` twice in two terminals) and gives you a versioned history of every infrastructure change.
-
-In this project, the backend infrastructure (S3 bucket + DynamoDB table) is provisioned first, in a separate Terraform module (`aws/terraform/backend-setup/`), before the main infrastructure is applied. This is intentional: the backend must exist before Terraform can use it to store the state of the main module.
+The Terraform state is stored remotely in S3 (versioning + AES-256 encryption) and locked via DynamoDB to prevent concurrent deployments — see [`aws/README.md`](aws/README.md) for a detailed explanation of this pattern.
 
 ---
 
 ## API Endpoints
 
 All endpoints under `/api/*` require the `X-API-KEY` header. Swagger UI is publicly accessible at `/swagger-ui/index.html`.
-
-**Users** — `/api/users`
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/users` | Create a user (password is BCrypt-hashed) |
-| `GET` | `/api/users` | List all users |
-| `GET` | `/api/users/{id}` | Get a user by ID |
-| `PUT` | `/api/users/{id}` | Update a user |
-| `DELETE` | `/api/users/{id}` | Delete a user |
-
-**Contacts** — `/api/contacts`
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/contacts` | Create a contact (linked to a user) |
-| `GET` | `/api/contacts` | List all contacts |
-| `GET` | `/api/contacts/{id}` | Get a contact by ID |
-| `PUT` | `/api/contacts/{id}` | Update a contact |
-| `DELETE` | `/api/contacts/{id}` | Delete a contact |
 
 ---
 
@@ -235,32 +170,6 @@ Swagger UI: `http://localhost:8081/swagger-ui/index.html`
 ./jenkins_local/jenkins_logs.sh    # tails logs
 ```
 
-### Environment variables
-
-| Variable | Description |
-|----------|-------------|
-| `DB_NAME` | PostgreSQL database name |
-| `DB_USER` | PostgreSQL username |
-| `DB_PASSWORD` | PostgreSQL password |
-| `SPRING_DATASOURCE_URL` | JDBC URL — defaults to `jdbc:postgresql://db:5432/${DB_NAME}` |
-| `API_KEY` | Secret key sent in the `X-API-KEY` header on all `/api/*` requests |
-
----
-
-## Security
-
-No secrets are hardcoded or committed to the repository. Each secret lives in the layer that owns it:
-
-| Secret | How it's handled |
-|--------|-----------------|
-| App credentials (`.env`) | Jenkins secret file credential (`env-file-id`), SCP'd to EC2 at deploy time |
-| EC2 PEM key | Generated by Terraform, stored as Jenkins SSH credential (`aws-ec2-pem`), in `.gitignore` |
-| GitHub token | Jenkins credential (`github-token-id`), injected via `withCredentials`, never printed in logs |
-| EC2 IP | Jenkins credential (`server-ip-id`), auto-updated by `setup-infra.sh` after each `terraform apply` |
-
-SSH access uses the PEM key (no password). `ssh-keyscan` populates `known_hosts` before each connection — no `StrictHostKeyChecking=no`. The Security Group restricts SSH (port 22) to your IP only; ports 80 and 443 are not open.
-
----
 
 ## Project Structure
 
@@ -279,6 +188,47 @@ SSH access uses the PEM key (no password). `ssh-keyscan` populates `known_hosts`
 ├── JENKINS_SETUP.md            # Jenkins initial configuration guide
 └── .env.example                # Environment variable template
 ```
+
+---
+
+## Security
+
+No secrets are hardcoded or committed to the repository. Each secret lives in the layer that owns it:
+
+| Secret | How it's handled |
+|--------|-----------------|
+| App credentials (`.env`) | Jenkins secret file credential (`env-file-id`), SCP'd to EC2 at deploy time |
+| EC2 PEM key | Generated by Terraform, stored as Jenkins SSH credential (`aws-ec2-pem`), in `.gitignore` |
+| GitHub token | Jenkins credential (`github-token-id`), injected via `withCredentials`, never printed in logs |
+| EC2 IP | Jenkins credential (`server-ip-id`), auto-updated by `setup-infra.sh` after each `terraform apply` |
+
+SSH access uses the PEM key (no password). `ssh-keyscan` populates `known_hosts` before each connection — no `StrictHostKeyChecking=no`. The Security Group restricts SSH (port 22) to your IP only; ports 80 and 443 are not open.
+
+---
+
+## Going Further
+
+This project focuses on the CI/CD pipeline and the infrastructure automation. Several layers could be added to make it production-grade — they were intentionally left out because the goal was to learn Jenkins, not to build a complete production setup.
+
+### Reverse proxy, TLS and WAF
+
+The application is currently exposed directly on port 8081 over plain HTTP. In a real setup, you would put a reverse proxy in front of it:
+
+- **[BunkerWeb](https://github.com/bunkerity/bunkerweb)** — an nginx-based web application firewall (WAF) that blocks common attacks (SQLi, XSS, bad bots, brute force) out of the box. Drop-in replacement for a standard nginx setup with security built in.
+- **Nginx + Fail2ban** — a lighter alternative: nginx as a reverse proxy with Fail2ban watching the logs and automatically banning IPs that trigger too many failed requests.
+- **Let's Encrypt** — free TLS certificates, auto-renewed, easily integrated via Certbot with either of the above.
+
+### DNS management
+
+Instead of exposing the raw EC2 IP, you would point a domain at the Elastic IP and manage DNS through a provider like **Cloudflare**. Beyond DNS, Cloudflare also acts as a CDN and adds another layer of DDoS protection and bot filtering in front of the origin server.
+
+### Jenkins on AWS instead of locally
+
+In this project, Jenkins runs locally in Docker on your own machine. This is fine for learning but has obvious limitations: your machine needs to be on and reachable from GitHub for webhooks to work.
+
+The natural next step would be to run Jenkins on its own dedicated EC2 instance, provisioned the same way as the application server (Terraform + Ansible), with BunkerWeb or Nginx in front to protect the Jenkins UI from the internet.
+
+This was deliberately left out for one practical reason: **cost**. Running a permanent EC2 instance for Jenkins (even a `t2.micro`) adds to the AWS bill every hour. For a personal learning project, keeping Jenkins local avoids unnecessary spending while still covering everything the pipeline needs to do.
 
 ---
 
