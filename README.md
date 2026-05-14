@@ -179,6 +179,8 @@ Swagger UI: `http://localhost:8081/swagger-ui/index.html`
 ./jenkins_local/jenkins_logs.sh    # tails logs
 ```
 
+Jenkins data (plugins, credentials, pipeline configuration, build history) is stored in a Docker volume named `jenkins-data`. Stopping and restarting the container with `jenkins_stop.sh` / `jenkins_start.sh` preserves everything — no need to reconfigure Jenkins from scratch between sessions.
+
 
 ## Project Structure
 

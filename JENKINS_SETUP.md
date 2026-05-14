@@ -25,6 +25,8 @@ The `jenkins_local/` folder contains three ready-to-use scripts:
 - Restarting the container if it already exists but is stopped
 - Printing the initial admin password at the end
 
+All Jenkins data (plugins, credentials, pipeline configuration, build history) is stored in the `jenkins-data` Docker volume. Stopping the container with `jenkins_stop.sh` and restarting it later with `jenkins_start.sh` preserves everything — no need to go through the setup steps again between sessions.
+
 Access Jenkins at:
 ```
 http://localhost:8080
